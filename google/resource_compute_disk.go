@@ -29,6 +29,190 @@ import (
 	"google.golang.org/api/googleapi"
 )
 
+func resourceComputeDisk() *schema.Resource {
+	return &schema.Resource{
+		Create: resourceComputeDiskCreate,
+		Read:   resourceComputeDiskRead,
+		Update: resourceComputeDiskUpdate,
+		Delete: resourceComputeDiskDelete,
+
+		Importer: &schema.ResourceImporter{
+			State: resourceComputeDiskImport,
+		},
+
+		Timeouts: &schema.ResourceTimeout{
+			Create: schema.DefaultTimeout(300 * time.Second),
+			Update: schema.DefaultTimeout(240 * time.Second),
+			Delete: schema.DefaultTimeout(240 * time.Second),
+		},
+		CustomizeDiff: customdiff.All(
+			customdiff.ForceNewIfChange("size", isDiskShrinkage)),
+
+		Schema: map[string]*schema.Schema{
+			"name": {
+				Type:     schema.TypeString,
+				Required: true,
+				ForceNew: true,
+			},
+			"description": {
+				Type:     schema.TypeString,
+				Optional: true,
+				ForceNew: true,
+			},
+			"labels": {
+				Type:     schema.TypeMap,
+				Optional: true,
+				Elem:     &schema.Schema{Type: schema.TypeString},
+			},
+			"size": {
+				Type:     schema.TypeInt,
+				Computed: true,
+				Optional: true,
+			},
+			"type": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: compareSelfLinkOrResourceName,
+				Default:          "pd-standard",
+			},
+			"image": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: diskImageDiffSuppress,
+			},
+			"zone": {
+				Type:             schema.TypeString,
+				Computed:         true,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: compareSelfLinkOrResourceName,
+			},
+			"source_image_encryption_key": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"raw_key": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
+						"sha256": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"disk_encryption_key": {
+				Type:             schema.TypeList,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: diskEncryptionKeyDiffSuppress,
+				MaxItems:         1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"raw_key": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
+						"sha256": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"snapshot": {
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				DiffSuppressFunc: compareSelfLinkOrResourceName,
+			},
+			"source_snapshot_encryption_key": {
+				Type:     schema.TypeList,
+				Optional: true,
+				ForceNew: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"raw_key": {
+							Type:     schema.TypeString,
+							Optional: true,
+							ForceNew: true,
+						},
+						"sha256": {
+							Type:     schema.TypeString,
+							Computed: true,
+						},
+					},
+				},
+			},
+			"creation_timestamp": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"label_fingerprint": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"last_attach_timestamp": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"last_detach_timestamp": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"source_image_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"source_snapshot_id": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"users": {
+				Type:     schema.TypeList,
+				Computed: true,
+				Elem: &schema.Schema{
+					Type:             schema.TypeString,
+					DiffSuppressFunc: compareSelfLinkOrResourceName,
+				},
+			},
+			"disk_encryption_key_raw": &schema.Schema{
+				Type:             schema.TypeString,
+				Optional:         true,
+				ForceNew:         true,
+				Sensitive:        true,
+				DiffSuppressFunc: diskEncryptionKeyDiffSuppress,
+				Deprecated:       "Use disk_encryption_key.raw_key instead.",
+			},
+
+			"disk_encryption_key_sha256": &schema.Schema{
+				Type:       schema.TypeString,
+				Computed:   true,
+				Deprecated: "Use disk_encryption_key.sha256 instead.",
+			},
+			"project": {
+				Type:     schema.TypeString,
+				Optional: true,
+				Computed: true,
+				ForceNew: true,
+			},
+			"self_link": {
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+		},
+	}
+}
+
 const (
 	computeDiskUserRegexString = "^(?:https://www.googleapis.com/compute/v1/projects/)?(" + ProjectRegex + ")/zones/([-_a-zA-Z0-9]*)/instances/([-_a-zA-Z0-9]*)$"
 )
@@ -243,190 +427,6 @@ func diskEncryptionKeyDiffSuppress(k, old, new string, d *schema.ResourceData) b
 		return disk_key == old && old != "" && new == ""
 	}
 	return false
-}
-
-func resourceComputeDisk() *schema.Resource {
-	return &schema.Resource{
-		Create: resourceComputeDiskCreate,
-		Read:   resourceComputeDiskRead,
-		Update: resourceComputeDiskUpdate,
-		Delete: resourceComputeDiskDelete,
-
-		Importer: &schema.ResourceImporter{
-			State: resourceComputeDiskImport,
-		},
-
-		Timeouts: &schema.ResourceTimeout{
-			Create: schema.DefaultTimeout(300 * time.Second),
-			Update: schema.DefaultTimeout(240 * time.Second),
-			Delete: schema.DefaultTimeout(240 * time.Second),
-		},
-		CustomizeDiff: customdiff.All(
-			customdiff.ForceNewIfChange("size", isDiskShrinkage)),
-
-		Schema: map[string]*schema.Schema{
-			"name": {
-				Type:     schema.TypeString,
-				Required: true,
-				ForceNew: true,
-			},
-			"description": {
-				Type:     schema.TypeString,
-				Optional: true,
-				ForceNew: true,
-			},
-			"labels": {
-				Type:     schema.TypeMap,
-				Optional: true,
-				Elem:     &schema.Schema{Type: schema.TypeString},
-			},
-			"size": {
-				Type:     schema.TypeInt,
-				Computed: true,
-				Optional: true,
-			},
-			"type": {
-				Type:             schema.TypeString,
-				Optional:         true,
-				ForceNew:         true,
-				DiffSuppressFunc: compareSelfLinkOrResourceName,
-				Default:          "pd-standard",
-			},
-			"image": {
-				Type:             schema.TypeString,
-				Optional:         true,
-				ForceNew:         true,
-				DiffSuppressFunc: diskImageDiffSuppress,
-			},
-			"zone": {
-				Type:             schema.TypeString,
-				Computed:         true,
-				Optional:         true,
-				ForceNew:         true,
-				DiffSuppressFunc: compareSelfLinkOrResourceName,
-			},
-			"source_image_encryption_key": {
-				Type:     schema.TypeList,
-				Optional: true,
-				ForceNew: true,
-				MaxItems: 1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"raw_key": {
-							Type:     schema.TypeString,
-							Optional: true,
-							ForceNew: true,
-						},
-						"sha256": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-			"disk_encryption_key": {
-				Type:             schema.TypeList,
-				Optional:         true,
-				ForceNew:         true,
-				DiffSuppressFunc: diskEncryptionKeyDiffSuppress,
-				MaxItems:         1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"raw_key": {
-							Type:     schema.TypeString,
-							Optional: true,
-							ForceNew: true,
-						},
-						"sha256": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-			"snapshot": {
-				Type:             schema.TypeString,
-				Optional:         true,
-				ForceNew:         true,
-				DiffSuppressFunc: compareSelfLinkOrResourceName,
-			},
-			"source_snapshot_encryption_key": {
-				Type:     schema.TypeList,
-				Optional: true,
-				ForceNew: true,
-				MaxItems: 1,
-				Elem: &schema.Resource{
-					Schema: map[string]*schema.Schema{
-						"raw_key": {
-							Type:     schema.TypeString,
-							Optional: true,
-							ForceNew: true,
-						},
-						"sha256": {
-							Type:     schema.TypeString,
-							Computed: true,
-						},
-					},
-				},
-			},
-			"creation_timestamp": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"label_fingerprint": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"last_attach_timestamp": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"last_detach_timestamp": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"source_image_id": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"source_snapshot_id": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-			"users": {
-				Type:     schema.TypeList,
-				Computed: true,
-				Elem: &schema.Schema{
-					Type:             schema.TypeString,
-					DiffSuppressFunc: compareSelfLinkOrResourceName,
-				},
-			},
-			"disk_encryption_key_raw": &schema.Schema{
-				Type:             schema.TypeString,
-				Optional:         true,
-				ForceNew:         true,
-				Sensitive:        true,
-				DiffSuppressFunc: diskEncryptionKeyDiffSuppress,
-				Deprecated:       "Use disk_encryption_key.raw_key instead.",
-			},
-
-			"disk_encryption_key_sha256": &schema.Schema{
-				Type:       schema.TypeString,
-				Computed:   true,
-				Deprecated: "Use disk_encryption_key.sha256 instead.",
-			},
-			"project": {
-				Type:     schema.TypeString,
-				Optional: true,
-				Computed: true,
-				ForceNew: true,
-			},
-			"self_link": {
-				Type:     schema.TypeString,
-				Computed: true,
-			},
-		},
-	}
 }
 
 func resourceComputeDiskCreate(d *schema.ResourceData, meta interface{}) error {
